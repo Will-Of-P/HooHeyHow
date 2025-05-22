@@ -54,8 +54,12 @@
     ];
 
     const faces = [
-      { name: 'Nai', id: 5 }, { name: 'Bau', id: 0 }, { name: 'Cat', id: 2 },
-      { name: 'Fish', id: 3 }, { name: 'Crab', id: 1 }, { name: 'Shrimp', id: 4 }
+      { name: 'Nai', id: 5, src: 'nai.jpg' },
+      { name: 'Bau', id: 0, src: 'bau.jpg' },
+      { name: 'Mèo', id: 2, src: 'cop.jpg' },
+      { name: 'Cá', id: 3, src: 'ca.jpg' },
+      { name: 'Cua', id: 1, src: 'cua.jpg' },
+      { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
 
     let provider, signer, contract, MIN_BET, selectedFace;
@@ -71,7 +75,7 @@
       const board = document.getElementById('faces');
       faces.forEach(f => {
         const img = document.createElement('img');
-        img.src = `game/${f.name.toLowerCase()}.jpg`;
+        img.src = `game/${f.src}`;
         img.alt = f.name;
         img.onclick = () => selectFace(f.id);
         board.appendChild(img);
@@ -100,7 +104,7 @@
 
         document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
       } catch (e) {
-        alert('Connection failed: ' + e.message);
+        alert('Connection failed: ' + e.message + '\nMake sure you are on Monad Testnet (chainId 10143)');
       }
     }
 
@@ -124,7 +128,7 @@
           const [_, results, winAmount] = evt.args;
           results.forEach(id => {
             const f = faces.find(x => x.id === id);
-            const img = document.createElement('img'); img.src = `game/${f.name.toLowerCase()}.jpg`;
+            const img = document.createElement('img'); img.src = `game/${f.src}`;
             res.appendChild(img);
           });
           alert(`You won: ${ethers.utils.formatUnits(winAmount,18)} MON`);
