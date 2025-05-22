@@ -48,7 +48,7 @@
     const providerOptions = { walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } } };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0x9bA773DaF936B6e7cc0366a034a2dE13D45f9F97";
+    const CONTRACT_ADDRESS = "<YOUR_CONTRACT_ADDRESS>";
     const CONTRACT_ABI = [
       "function minimumBet() view returns (uint256)",
       "function placeBet(uint8) payable",
@@ -139,31 +139,27 @@
       }
     }
     async function showResult(events, txHash) {
-      // Use receipt.events filtered by txHash and indexed bettor to avoid mixing with others
-      document.getElementById('result').innerHTML = '';
-      let found = false;
-      events.forEach(evt => {
-        if (evt.event === 'BetResult' && evt.transactionHash === txHash) {
-          found = true;
-          const [bettor, results, winAmount] = evt.args;
-          results.forEach(id => {
-            const f = faces.find(x => x.id === id);
-            const img = document.createElement('img');
-            img.src = `game/${f.src}`;
-            document.getElementById('result').appendChild(img);
-          });
-          const msg = document.createElement('p');
-          msg.innerText = `You won: ${ethers.utils.formatUnits(winAmount,18)} MON`;
-          document.getElementById('result').appendChild(msg);
-          setStatus('Result from this transaction');
-        }
-      });
-      if (!found) {
+      // Only use receipt.events filtered by txHash
+      const res = document.getElementById('result'); res.innerHTML = '';
+      const evt = events.find(e => e.event === 'BetResult' && e.transactionHash === txHash);
+      if (!evt) {
         setStatus('Error: no matching event for your transaction');
+        return;
       }
+      const [bettor, results, winAmount] = evt.args;
+      results.forEach(id => {
+        const f = faces.find(x => x.id === id);
+        const img = document.createElement('img');
+        img.src = `game/${f.src}`;
+        res.appendChild(img);
+      });
+      const msg = document.createElement('p');
+      msg.innerText = `You won: ${ethers.utils.formatUnits(winAmount,18)} MON`;
+      res.appendChild(msg);
+      setStatus('Result from this transaction');
     }
 
-    function setStatus(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }
+    function setStatus(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }
   </script>
 </body>
 </html>
