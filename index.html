@@ -24,21 +24,29 @@
 <body>
   <div class="container">
     <h1>On-Chain Bau Cua Game</h1>
-    <p id="wallet-status"><button id="connectBtn">Connect Wallet</button></p>
+    <div id="connectCard">
+      <button id="btnConnect">Connect Wallet</button>
+      <button id="btnDisconnect" style="display:none; background:#dc3545;">Disconnect Wallet</button>
+      <p id="walletAddress">Not connected</p>
+    </div>
     <div class="board" id="faces"></div>
     <div>
       <input type="number" id="betAmount" placeholder="Amount of MON (>= MIN)" min="0" step="0.01" disabled />
       <button id="betBtn" disabled>Place Bet</button>
     </div>
     <div class="result" id="result"></div>
+    <p id="status" style="color:#555; font-size:0.9rem;"></p>
   </div>
 
   <script>
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
 
-    const providerOptions = { 
-      walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } } 
+    const providerOptions = {
+      walletconnect: {
+        package: WalletConnectProvider,
+        options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 }
+      }
     };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
@@ -59,11 +67,12 @@
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
 
-    let provider, signer, contract, MIN_BET, selectedFace;
+    let provider, signer, contract, MIN_BET, selectedFace, instance;
 
     async function init() {
       renderBoard();
-      document.getElementById('connectBtn').onclick = connectWallet;
+      document.getElementById('btnConnect').onclick = connectWallet;
+      document.getElementById('btnDisconnect').onclick = disconnectWallet;
       document.getElementById('betBtn').onclick = placeBet;
       if (web3Modal.cachedProvider) await connectWallet();
     }
@@ -82,20 +91,12 @@
     function selectFace(id) {
       selectedFace = id;
       document.getElementById('betAmount').disabled = false;
+      setStatus('');
     }
 
     async function connectWallet() {
-      let instance;
       try {
-        try {
-          instance = await web3Modal.connect();
-        } catch (err) {
-          // Fallback if provider injection error (e.g. getter-only ethereum)
-          if (err.message.includes('Cannot set property ethereum')) {
-            instance = window.ethereum;
-            await instance.request({ method: 'eth_requestAccounts' });
-          } else throw err;
-        }
+        instance = await web3Modal.connect();
         provider = new ethers.providers.Web3Provider(instance);
         const net = await provider.getNetwork();
         if (net.chainId !== chainId) throw new Error(`Wrong network: ${net.chainId}`);
@@ -105,23 +106,37 @@
         MIN_BET = await contract.minimumBet();
 
         const addr = await signer.getAddress();
-        document.getElementById('wallet-status').innerText = `Wallet: ${addr}`;
-        document.getElementById('connectBtn').style.display = 'none';
+        document.getElementById('walletAddress').innerText = addr;
+        document.getElementById('btnConnect').style.display = 'none';
+        document.getElementById('btnDisconnect').style.display = 'inline-block';
         document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
+        setStatus('Connected to Monad Testnet');
+
+        instance.on('disconnect', disconnectWallet);
       } catch (e) {
-        const msg = e.message || '';
-        alert('Connection failed: ' + msg + '\nEnsure you are on Monad Testnet (chainId 10143)');
+        alert('Connection failed: ' + e.message + '\nEnsure you are on Monad Testnet (chainId 10143)');
       }
     }
 
+    async function disconnectWallet() {
+      await web3Modal.clearCachedProvider();
+      document.getElementById('btnDisconnect').style.display = 'none';
+      document.getElementById('btnConnect').style.display = 'inline-block';
+      document.getElementById('walletAddress').innerText = 'Not connected';
+      document.getElementById('betAmount').disabled = true;
+      document.getElementById('betBtn').disabled = true;
+      setStatus('Disconnected');
+      selectedFace = undefined;
+    }
+
     async function placeBet() {
-      const amtField = document.getElementById('betAmount');
-      const val = amtField.value;
-      if (selectedFace === undefined) return alert('Please select a face first!');
+      const val = document.getElementById('betAmount').value;
+      if (!selectedFace && selectedFace !== 0) return alert('Please select a face first!');
       if (!val || parseFloat(val) <= 0) return alert('Enter a valid MON amount');
       const betValue = ethers.utils.parseUnits(val,18);
       if (betValue.lt(MIN_BET)) return alert(`Minimum bet is ${ethers.utils.formatUnits(MIN_BET,18)} MON`);
 
+      setStatus('Submitting transaction...');
       const tx = await contract.placeBet(selectedFace, { value: betValue });
       const receipt = await tx.wait();
       showResult(receipt.events, tx.hash);
@@ -138,8 +153,13 @@
             res.appendChild(img);
           });
           alert(`You won: ${ethers.utils.formatUnits(winAmount,18)} MON`);
+          setStatus('');
         }
       });
+    }
+
+    function setStatus(msg) {
+      document.getElementById('status').innerText = msg;
     }
 
     window.onload = init;
