@@ -48,7 +48,7 @@
     const providerOptions = { walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } } };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "<YOUR_CONTRACT_ADDRESS>";
+    const CONTRACT_ADDRESS = "0x8aB69B84D2FC64EBc293d64b146479B6406E23Ea";
     const CONTRACT_ABI = [
       "function minimumBet() view returns (uint256)",
       "function placeBet(uint8) payable",
