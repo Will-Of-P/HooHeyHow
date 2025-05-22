@@ -138,26 +138,32 @@
         res.appendChild(img);
       }
     }
-    function showResult(events, txHash) {
-      const res = document.getElementById('result'); res.innerHTML = '';
-      let winAmt;
+    async function showResult(events, txHash) {
+      // Use receipt.events filtered by txHash and indexed bettor to avoid mixing with others
+      document.getElementById('result').innerHTML = '';
+      let found = false;
       events.forEach(evt => {
-        if (evt.event==='BetResult'&&evt.transactionHash===txHash) {
-          const [_, results, amount] = evt.args;
-          winAmt = amount;
-          results.forEach(id=>{
-            const f = faces.find(x=>x.id===id);
-            const img = document.createElement('img'); img.src=`game/${f.src}`;
-            res.appendChild(img);
+        if (evt.event === 'BetResult' && evt.transactionHash === txHash) {
+          found = true;
+          const [bettor, results, winAmount] = evt.args;
+          results.forEach(id => {
+            const f = faces.find(x => x.id === id);
+            const img = document.createElement('img');
+            img.src = `game/${f.src}`;
+            document.getElementById('result').appendChild(img);
           });
+          const msg = document.createElement('p');
+          msg.innerText = `You won: ${ethers.utils.formatUnits(winAmount,18)} MON`;
+          document.getElementById('result').appendChild(msg);
+          setStatus('Result from this transaction');
         }
       });
-      const msg = document.createElement('p');
-      msg.innerText = `You won: ${ethers.utils.formatUnits(winAmt,18)} MON`;
-      res.appendChild(msg);
-      setStatus('');
+      if (!found) {
+        setStatus('Error: no matching event for your transaction');
+      }
     }
-    function setStatus(msg) { document.getElementById('status').innerText = msg; }
+
+    function setStatus(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }(msg) { document.getElementById('status').innerText = msg; }
   </script>
 </body>
 </html>
