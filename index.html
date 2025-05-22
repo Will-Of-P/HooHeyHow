@@ -15,12 +15,13 @@
     .container { text-align: center; }
     .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-bottom: 20px; }
     .board img, .result img { width: 100px; height: 100px; border: 2px solid #333; border-radius: 10px; cursor: pointer; }
-    /* highlight selected face */
-    .board img.selected { border: 2px solid red; }
+    .board img.selected { border: 4px solid red; }
     input, button { padding: 10px; font-size: 16px; margin: 5px; }
     button { background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .result { margin-top: 20px; display: flex; justify-content: center; gap: 10px; }
+    .result { margin-top: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .spinning { animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
     #status { color: #555; font-size: 0.9rem; margin-top: 1rem; }
   </style>
 </head>
@@ -44,23 +45,15 @@
   <script>
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
-
-    const providerOptions = {
-      walletconnect: {
-        package: WalletConnectProvider,
-        options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 }
-      }
-    };
+    const providerOptions = { walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } } };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
-
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0x9bA773DaF936B6e7cc0366a034a2dE13D45f9F97";
+    const CONTRACT_ADDRESS = "<YOUR_CONTRACT_ADDRESS>";
     const CONTRACT_ABI = [
       "function minimumBet() view returns (uint256)",
       "function placeBet(uint8) payable",
       "event BetResult(address indexed bettor, uint8[3] results, uint256 winAmount, uint256 feeBurnETH, uint256 rewardAmount)"
     ];
-
     const faces = [
       { name: 'Nai', id: 5, src: 'nai.jpg' },
       { name: 'Bau', id: 0, src: 'bau.jpg' },
@@ -69,17 +62,16 @@
       { name: 'Cua', id: 1, src: 'cua.jpg' },
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
-
     let provider, signer, contract, MIN_BET, selectedFace, instance;
 
-    async function init() {
+    window.onload = init;
+    function init() {
       renderBoard();
       document.getElementById('btnConnect').onclick = connectWallet;
       document.getElementById('btnDisconnect').onclick = disconnectWallet;
       document.getElementById('betBtn').onclick = placeBet;
-      if (web3Modal.cachedProvider) await connectWallet();
+      if (web3Modal.cachedProvider) connectWallet();
     }
-
     function renderBoard() {
       const board = document.getElementById('faces');
       faces.forEach(f => {
@@ -90,54 +82,31 @@
         board.appendChild(img);
       });
     }
-
-    function selectFace(id, imgElement) {
+    function selectFace(id, imgEl) {
       selectedFace = id;
-      // clear previous selection
-      document.querySelectorAll('.board img').forEach(img => img.classList.remove('selected'));
-      // highlight this one
-      imgElement.classList.add('selected');
-      // enable input and button
+      document.querySelectorAll('.board img').forEach(i => i.classList.remove('selected'));
+      imgEl.classList.add('selected');
       document.getElementById('betAmount').disabled = false;
       document.getElementById('betBtn').disabled = false;
       setStatus('');
     }
-
     async function connectWallet() {
-      try {
-        instance = await web3Modal.connect();
-      } catch (err) {
-        alert('Provider error: ' + err.message);
-        return;
-      }
+      try { instance = await web3Modal.connect(); }
+      catch (err) { alert('Provider error: ' + err.message); return; }
       provider = new ethers.providers.Web3Provider(instance, { name: 'monad-testnet', chainId: CHAIN_ID });
-      try {
-        const net = await provider.getNetwork();
-        if (net.chainId !== CHAIN_ID) throw new Error(`Wrong network: ${net.chainId}`);
-      } catch (netErr) {
-        alert('Network error: ' + netErr.message + '\nPlease switch to Monad Testnet (chainId 10143)');
-        return;
-      }
-
+      const net = await provider.getNetwork();
+      if (net.chainId !== CHAIN_ID) { alert('Switch to Monad Testnet (chainId 10143)'); return; }
       signer = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      try {
-        MIN_BET = await contract.minimumBet();
-      } catch (e) {
-        alert('Contract error: ' + e.message);
-        return;
-      }
-
+      MIN_BET = await contract.minimumBet();
       const addr = await signer.getAddress();
       document.getElementById('walletAddress').innerText = addr;
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
       document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
-      setStatus('Connected to Monad Testnet');
-
+      setStatus('Connected');
       if (instance.on) instance.on('disconnect', disconnectWallet);
     }
-
     async function disconnectWallet() {
       await web3Modal.clearCachedProvider();
       document.getElementById('btnDisconnect').style.display = 'none';
@@ -145,46 +114,50 @@
       document.getElementById('walletAddress').innerText = 'Not connected';
       document.getElementById('betAmount').disabled = true;
       document.getElementById('betBtn').disabled = true;
-      // clear selection highlight
-      document.querySelectorAll('.board img').forEach(img => img.classList.remove('selected'));
-      setStatus('Disconnected');
-      selectedFace = undefined;
+      document.querySelectorAll('.board img').forEach(i => i.classList.remove('selected'));
+      setStatus('Disconnected'); selectedFace = undefined;
     }
-
     async function placeBet() {
-      const val = document.getElementById('betAmount').value;
-      if (selectedFace === undefined) return alert('Please select a face first!');
-      if (!val || parseFloat(val) <= 0) return alert('Enter a valid MON amount');
-      const betValue = ethers.utils.parseUnits(val,18);
-      if (betValue.lt(MIN_BET)) return alert(`Minimum bet is ${ethers.utils.formatUnits(MIN_BET,18)} MON`);
-
-      setStatus('Submitting transaction...');
-      const tx = await contract.placeBet(selectedFace, { value: betValue });
+      const amount = document.getElementById('betAmount').value;
+      if (selectedFace === undefined) return alert('Select a face!');
+      if (!amount || parseFloat(amount)<=0) return alert('Enter valid MON');
+      const betValue = ethers.utils.parseUnits(amount,18);
+      if (betValue.lt(MIN_BET)) return alert(`Minimum ${ethers.utils.formatUnits(MIN_BET,18)} MON`);
+      setStatus('Submitting...');
+      const tx = await contract.placeBet(selectedFace,{ value: betValue });
       const receipt = await tx.wait();
-      showResult(receipt.events, tx.hash);
+      showLoading();
+      setTimeout(() => showResult(receipt.events, tx.hash), 5000);
     }
-
+    function showLoading() {
+      const res = document.getElementById('result'); res.innerHTML = '';
+      for(let i=0;i<3;i++){
+        const img = document.createElement('img');
+        img.src = 'game/monad.png';
+        img.classList.add('spinning');
+        res.appendChild(img);
+      }
+    }
     function showResult(events, txHash) {
       const res = document.getElementById('result'); res.innerHTML = '';
+      let winAmt;
       events.forEach(evt => {
-        if (evt.event === 'BetResult' && evt.transactionHash === txHash) {
-          const [_, results, winAmount] = evt.args;
-          results.forEach(id => {
-            const f = faces.find(x => x.id === id);
-            const img = document.createElement('img'); img.src = `game/${f.src}`;
+        if (evt.event==='BetResult'&&evt.transactionHash===txHash) {
+          const [_, results, amount] = evt.args;
+          winAmt = amount;
+          results.forEach(id=>{
+            const f = faces.find(x=>x.id===id);
+            const img = document.createElement('img'); img.src=`game/${f.src}`;
             res.appendChild(img);
           });
-          alert(`You won: ${ethers.utils.formatUnits(winAmount,18)} MON`);
-          setStatus('');
         }
       });
+      const msg = document.createElement('p');
+      msg.innerText = `You won: ${ethers.utils.formatUnits(winAmt,18)} MON`;
+      res.appendChild(msg);
+      setStatus('');
     }
-
-    function setStatus(msg) {
-      document.getElementById('status').innerText = msg;
-    }
-
-    window.onload = init;
+    function setStatus(msg) { document.getElementById('status').innerText = msg; }
   </script>
 </body>
 </html>
