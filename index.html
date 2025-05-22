@@ -38,10 +38,7 @@
     const WalletConnectProvider = window.WalletConnectProvider.default;
 
     const providerOptions = { 
-      walletconnect: { 
-        package: WalletConnectProvider, 
-        options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } 
-      } 
+      walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } } 
     };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
@@ -88,8 +85,17 @@
     }
 
     async function connectWallet() {
+      let instance;
       try {
-        const instance = await web3Modal.connect();
+        try {
+          instance = await web3Modal.connect();
+        } catch (err) {
+          // Fallback if provider injection error (e.g. getter-only ethereum)
+          if (err.message.includes('Cannot set property ethereum')) {
+            instance = window.ethereum;
+            await instance.request({ method: 'eth_requestAccounts' });
+          } else throw err;
+        }
         provider = new ethers.providers.Web3Provider(instance);
         const net = await provider.getNetwork();
         if (net.chainId !== chainId) throw new Error(`Wrong network: ${net.chainId}`);
@@ -101,10 +107,10 @@
         const addr = await signer.getAddress();
         document.getElementById('wallet-status').innerText = `Wallet: ${addr}`;
         document.getElementById('connectBtn').style.display = 'none';
-
         document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
       } catch (e) {
-        alert('Connection failed: ' + e.message + '\nMake sure you are on Monad Testnet (chainId 10143)');
+        const msg = e.message || '';
+        alert('Connection failed: ' + msg + '\nEnsure you are on Monad Testnet (chainId 10143)');
       }
     }
 
