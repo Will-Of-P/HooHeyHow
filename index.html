@@ -19,6 +19,7 @@
     button { background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .result { margin-top: 20px; display: flex; justify-content: center; gap: 10px; }
+    #status { color: #555; font-size: 0.9rem; margin-top: 1rem; }
   </style>
 </head>
 <body>
@@ -35,7 +36,7 @@
       <button id="betBtn" disabled>Place Bet</button>
     </div>
     <div class="result" id="result"></div>
-    <p id="status" style="color:#555; font-size:0.9rem;"></p>
+    <p id="status"></p>
   </div>
 
   <script>
@@ -50,8 +51,8 @@
     };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
-    const chainId = 10143;
-    const CONTRACT_ADDRESS = "<YOUR_CONTRACT_ADDRESS>";
+    const CHAIN_ID = 10143;
+    const CONTRACT_ADDRESS = "0x9bA773DaF936B6e7cc0366a034a2dE13D45f9F97";
     const CONTRACT_ABI = [
       "function minimumBet() view returns (uint256)",
       "function placeBet(uint8) payable",
@@ -97,25 +98,37 @@
     async function connectWallet() {
       try {
         instance = await web3Modal.connect();
-        provider = new ethers.providers.Web3Provider(instance);
-        const net = await provider.getNetwork();
-        if (net.chainId !== chainId) throw new Error(`Wrong network: ${net.chainId}`);
-
-        signer = provider.getSigner();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-        MIN_BET = await contract.minimumBet();
-
-        const addr = await signer.getAddress();
-        document.getElementById('walletAddress').innerText = addr;
-        document.getElementById('btnConnect').style.display = 'none';
-        document.getElementById('btnDisconnect').style.display = 'inline-block';
-        document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
-        setStatus('Connected to Monad Testnet');
-
-        instance.on('disconnect', disconnectWallet);
-      } catch (e) {
-        alert('Connection failed: ' + e.message + '\nEnsure you are on Monad Testnet (chainId 10143)');
+      } catch (err) {
+        alert('Provider error: ' + err.message);
+        return;
       }
+      // Create provider with explicit chain params to avoid ENS lookup
+      provider = new ethers.providers.Web3Provider(instance, { name: 'monad-testnet', chainId: CHAIN_ID });
+      try {
+        const net = await provider.getNetwork();
+        if (net.chainId !== CHAIN_ID) throw new Error(`Wrong network: ${net.chainId}`);
+      } catch (netErr) {
+        alert('Network error: ' + netErr.message + '\nPlease switch to Monad Testnet (chainId 10143)');
+        return;
+      }
+
+      signer = provider.getSigner();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      try {
+        MIN_BET = await contract.minimumBet();
+      } catch (e) {
+        alert('Contract error: ' + e.message);
+        return;
+      }
+
+      const addr = await signer.getAddress();
+      document.getElementById('walletAddress').innerText = addr;
+      document.getElementById('btnConnect').style.display = 'none';
+      document.getElementById('btnDisconnect').style.display = 'inline-block';
+      document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
+      setStatus('Connected to Monad Testnet');
+
+      if (instance.on) instance.on('disconnect', disconnectWallet);
     }
 
     async function disconnectWallet() {
@@ -131,7 +144,7 @@
 
     async function placeBet() {
       const val = document.getElementById('betAmount').value;
-      if (!selectedFace && selectedFace !== 0) return alert('Please select a face first!');
+      if (selectedFace === undefined) return alert('Please select a face first!');
       if (!val || parseFloat(val) <= 0) return alert('Enter a valid MON amount');
       const betValue = ethers.utils.parseUnits(val,18);
       if (betValue.lt(MIN_BET)) return alert(`Minimum bet is ${ethers.utils.formatUnits(MIN_BET,18)} MON`);
