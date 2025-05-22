@@ -35,7 +35,7 @@
     </div>
     <div class="board" id="faces"></div>
     <div>
-      <input type="number" id="betAmount" placeholder="Amount of MON (>= MIN)" min="0" step="0.01" disabled />
+      <input type="number" id="betAmount" placeholder="Amount of MON (>= 0.01)" min="0" step="0.01" disabled />
       <button id="betBtn" disabled>Place Bet</button>
     </div>
     <div class="result" id="result"></div>
@@ -45,15 +45,18 @@
   <script>
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
-    const providerOptions = { walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } } };
+    const providerOptions = {
+      walletconnect: { package: WalletConnectProvider, options: { rpc: { 10143: 'https://testnet-rpc.monad.xyz' }, chainId: 10143 } }
+    };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
+
     const CHAIN_ID = 10143;
     const CONTRACT_ADDRESS = "0x8aB69B84D2FC64EBc293d64b146479B6406E23Ea";
     const CONTRACT_ABI = [
-      "function minimumBet() view returns (uint256)",
       "function placeBet(uint8) payable",
       "event BetResult(address indexed bettor, uint8[3] results, uint256 winAmount, uint256 feeBurnETH, uint256 rewardAmount)"
     ];
+    const MIN_BET = ethers.utils.parseEther('0.01');
     const faces = [
       { name: 'Nai', id: 5, src: 'nai.jpg' },
       { name: 'Bau', id: 0, src: 'bau.jpg' },
@@ -62,7 +65,7 @@
       { name: 'Cua', id: 1, src: 'cua.jpg' },
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
-    let provider, signer, contract, MIN_BET, selectedFace, instance;
+    let provider, signer, contract, selectedFace, instance;
 
     window.onload = init;
     function init() {
@@ -98,12 +101,10 @@
       if (net.chainId !== CHAIN_ID) { alert('Switch to Monad Testnet (chainId 10143)'); return; }
       signer = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      MIN_BET = await contract.minimumBet();
       const addr = await signer.getAddress();
       document.getElementById('walletAddress').innerText = addr;
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
-      document.getElementById('betAmount').placeholder = `>= ${ethers.utils.formatUnits(MIN_BET,18)} MON`;
       setStatus('Connected');
       if (instance.on) instance.on('disconnect', disconnectWallet);
     }
@@ -122,7 +123,7 @@
       if (selectedFace === undefined) return alert('Select a face!');
       if (!amount || parseFloat(amount)<=0) return alert('Enter valid MON');
       const betValue = ethers.utils.parseUnits(amount,18);
-      if (betValue.lt(MIN_BET)) return alert(`Minimum ${ethers.utils.formatUnits(MIN_BET,18)} MON`);
+      if (betValue.lt(MIN_BET)) return alert(`Minimum ${ethers.utils.formatEther(MIN_BET)} MON`);
       setStatus('Submitting...');
       const tx = await contract.placeBet(selectedFace,{ value: betValue });
       const receipt = await tx.wait();
@@ -139,26 +140,19 @@
       }
     }
     async function showResult(events, txHash) {
-      // Only use receipt.events filtered by txHash
       const res = document.getElementById('result'); res.innerHTML = '';
-      const evt = events.find(e => e.event === 'BetResult' && e.transactionHash === txHash);
-      if (!evt) {
-        setStatus('Error: no matching event for your transaction');
-        return;
-      }
-      const [bettor, results, winAmount] = evt.args;
-      results.forEach(id => {
-        const f = faces.find(x => x.id === id);
-        const img = document.createElement('img');
-        img.src = `game/${f.src}`;
+      const evt = events.find(e=>e.event==='BetResult'&&e.transactionHash===txHash);
+      if (!evt) { setStatus('Error: no matching event'); return; }
+      const [_, results, winAmount] = evt.args;
+      results.forEach(id=>{
+        const f=faces.find(x=>x.id===id);
+        const img=document.createElement('img'); img.src=`game/${f.src}`;
         res.appendChild(img);
       });
-      const msg = document.createElement('p');
-      msg.innerText = `You won: ${ethers.utils.formatUnits(winAmount,18)} MON`;
+      const msg=document.createElement('p'); msg.innerText=`You won: ${ethers.utils.formatUnits(winAmount,18)} MON`;
       res.appendChild(msg);
       setStatus('Result from this transaction');
     }
-
     function setStatus(msg) {
       document.getElementById('status').innerText = msg;
     }
