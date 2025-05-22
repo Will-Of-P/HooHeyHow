@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bầu cua cá mèo on-chain</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <style>
+    /* Existing styles from your UI */
+    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
+    .container { text-align: center; }
+    .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-bottom: 20px; }
+    .board img, .result img { width: 100px; height: 100px; border: 2px solid #333; border-radius: 10px; }
+    button { padding: 10px 20px; font-size: 18px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .result { margin-top: 20px; display: flex; justify-content: center; gap: 10px; }
+    .spinning { animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bầu cua cá mèo On-Chain</h1>
+    <p id="wallet-status"><button id="connectBtn">Kết nối ví</button></p>
+    <div class="board" id="faces">
+      <!-- render faces dynamically -->
+    </div>
+    <button id="betBtn" disabled>Đặt cược 0.01 ETH</button>
+    <div class="result" id="result"></div>
+  </div>
+
+  <script>
+    const CONTRACT_ADDRESS = "0x9bA773DaF936B6e7cc0366a034a2dE13D45f9F97";
+    const CONTRACT_ABI = [
+      // minimal ABI: placeBet, event BetResult
+      "function minimumBet() view returns (uint256)",
+      "function placeBet(uint8) payable",
+      "event BetResult(address indexed bettor, uint8[3] results, uint256 winAmount, uint256 feeBurnETH, uint256 rewardAmount)"
+    ];
+
+    let provider, signer, contract;
+
+    const faces = [
+      { name: 'Nai', id: 5 },
+      { name: 'Bầu', id: 0 },
+      { name: 'Mèo', id: 2 },
+      { name: 'Cá', id: 3 },
+      { name: 'Cua', id: 1 },
+      { name: 'Tôm', id: 4 }
+    ];
+
+    async function init() {
+      if (window.ethereum) {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        document.getElementById('connectBtn').addEventListener('click', connectWallet);
+        renderBoard();
+      } else alert('Vui lòng cài đặt MetaMask!');
+    }
+
+    function renderBoard() {
+      const board = document.getElementById('faces');
+      faces.forEach(face => {
+        const img = document.createElement('img');
+        img.src = `game/${face.name.toLowerCase()}.jpg`;
+        img.alt = face.name;
+        img.addEventListener('click', () => selectFace(face.id));
+        board.appendChild(img);
+      });
+    }
+
+    let selected = null;
+    function selectFace(faceId) {
+      selected = faceId;
+      document.getElementById('betBtn').disabled = false;
+      document.getElementById('betBtn').innerText = `Đặt cược mặt ${faceId} (0.01 ETH)`;
+    }
+
+    async function connectWallet() {
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      document.getElementById('wallet-status').innerText = `Ví: ${await signer.getAddress()}`;
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      document.getElementById('betBtn').addEventListener('click', placeBet);
+    }
+
+    async function placeBet() {
+      if (selected === null) return alert('Chọn một mặt trước!');
+      const tx = await contract.placeBet(selected, { value: ethers.utils.parseEther('0.01') });
+      document.getElementById('betBtn').disabled = true;
+      document.getElementById('betBtn').innerText = 'Đang chờ xác nhận...';
+      const receipt = await tx.wait();
+      document.getElementById('betBtn').innerText = 'Roll lại';
+      document.getElementById('betBtn').disabled = false;
+      parseEvent(receipt.events);
+    }
+
+    function parseEvent(events) {
+      document.getElementById('result').innerHTML = '';
+      events.forEach(evt => {
+        if (evt.event === 'BetResult') {
+          const [bettor, results, winAmount, feeBurn] = evt.args;
+          results.forEach(id => {
+            const img = document.createElement('img');
+            const face = faces.find(f => f.id === id);
+            img.src = `game/${face.name.toLowerCase()}.jpg`;
+            document.getElementById('result').appendChild(img);
+          });
+          alert(`Bạn thắng: ${ethers.utils.formatEther(winAmount)} ETH!`);
+        }
+      });
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
