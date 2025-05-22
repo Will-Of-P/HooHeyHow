@@ -14,7 +14,9 @@
     body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
     .container { text-align: center; }
     .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-bottom: 20px; }
-    .board img, .result img { width: 100px; height: 100px; border: 2px solid #333; border-radius: 10px; }
+    .board img, .result img { width: 100px; height: 100px; border: 2px solid #333; border-radius: 10px; cursor: pointer; }
+    /* highlight selected face */
+    .board img.selected { border: 2px solid red; }
     input, button { padding: 10px; font-size: 16px; margin: 5px; }
     button { background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -52,7 +54,7 @@
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0x9bA773DaF936B6e7cc0366a034a2dE13D45f9F97";
+    const CONTRACT_ADDRESS = "<YOUR_CONTRACT_ADDRESS>";
     const CONTRACT_ABI = [
       "function minimumBet() view returns (uint256)",
       "function placeBet(uint8) payable",
@@ -84,14 +86,20 @@
         const img = document.createElement('img');
         img.src = `game/${f.src}`;
         img.alt = f.name;
-        img.onclick = () => selectFace(f.id);
+        img.onclick = () => selectFace(f.id, img);
         board.appendChild(img);
       });
     }
 
-    function selectFace(id) {
+    function selectFace(id, imgElement) {
       selectedFace = id;
+      // clear previous selection
+      document.querySelectorAll('.board img').forEach(img => img.classList.remove('selected'));
+      // highlight this one
+      imgElement.classList.add('selected');
+      // enable input and button
       document.getElementById('betAmount').disabled = false;
+      document.getElementById('betBtn').disabled = false;
       setStatus('');
     }
 
@@ -102,7 +110,6 @@
         alert('Provider error: ' + err.message);
         return;
       }
-      // Create provider with explicit chain params to avoid ENS lookup
       provider = new ethers.providers.Web3Provider(instance, { name: 'monad-testnet', chainId: CHAIN_ID });
       try {
         const net = await provider.getNetwork();
@@ -138,6 +145,8 @@
       document.getElementById('walletAddress').innerText = 'Not connected';
       document.getElementById('betAmount').disabled = true;
       document.getElementById('betBtn').disabled = true;
+      // clear selection highlight
+      document.querySelectorAll('.board img').forEach(img => img.classList.remove('selected'));
       setStatus('Disconnected');
       selectedFace = undefined;
     }
