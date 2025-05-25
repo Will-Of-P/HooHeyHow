@@ -54,10 +54,11 @@
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0x8F622E88553965a066edE8B982A60a6A60C262D6";
+    const CONTRACT_ADDRESS = "0xc343669Ef22F2545A5D5dBC81353BaF5F0544AC1";
+    // Updated ABI to accept array of choices
     const CONTRACT_ABI = [
-      "function placeBet(uint8) payable",
-      "event BetResult(address indexed bettor, uint8[3] results, uint256 win, uint256 fee)"
+      "function placeBet(uint8[] choices) payable",
+      "event BetResult(address indexed bettor, uint8[] choices, uint8[3] results, uint256 win, uint256 fee)"
     ];
 
     const MIN_BET = ethers.utils.parseEther('0.01');
@@ -71,7 +72,7 @@
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
 
-    let provider, signer, contract, selectedFace, instance;
+    let provider, signer, contract, selectedFaces = [];
 
     window.onload = init;
     function init() {
@@ -88,25 +89,34 @@
         const img = document.createElement('img');
         img.src = `game/${f.src}`;
         img.alt = f.name;
-        img.onclick = () => selectFace(f.id, img);
+        img.onclick = () => toggleFace(f.id, img);
         board.appendChild(img);
       });
     }
 
-    function selectFace(id, imgEl) {
-      selectedFace = id;
-      document.querySelectorAll('.board img').forEach(i => i.classList.remove('selected'));
-      imgEl.classList.add('selected');
-      document.getElementById('betAmount').disabled = false;
-      document.getElementById('betBtn').disabled = false;
+    function toggleFace(id, imgEl) {
+      const idx = selectedFaces.indexOf(id);
+      if (idx === -1) {
+        if (selectedFaces.length < 3) {
+          selectedFaces.push(id);
+          imgEl.classList.add('selected');
+        } else {
+          alert('You can select up to 3 faces');
+        }
+      } else {
+        selectedFaces.splice(idx, 1);
+        imgEl.classList.remove('selected');
+      }
+      const valid = selectedFaces.length >= 1;
+      document.getElementById('betAmount').disabled = !valid;
+      document.getElementById('betBtn').disabled = !valid;
       setStatus('');
     }
 
     async function connectWallet() {
-      try { instance = await web3Modal.connect(); }
-      catch (err) { alert('Provider error: ' + err.message); return; }
+      try { const instance = await web3Modal.connect(); provider = new ethers.providers.Web3Provider(instance, { name: 'monad-testnet', chainId: CHAIN_ID });
+      } catch (err) { alert('Provider error: ' + err.message); return; }
 
-      provider = new ethers.providers.Web3Provider(instance, { name: 'monad-testnet', chainId: CHAIN_ID });
       const net = await provider.getNetwork();
       if (net.chainId !== CHAIN_ID) { alert('Switch to Monad Testnet (chainId 10143)'); return; }
 
@@ -118,8 +128,6 @@
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
       setStatus('Connected');
-
-      if (instance.on) instance.on('disconnect', disconnectWallet);
     }
 
     async function disconnectWallet() {
@@ -129,67 +137,47 @@
       document.getElementById('walletAddress').innerText = 'Not connected';
       document.getElementById('betAmount').disabled = true;
       document.getElementById('betBtn').disabled = true;
+      selectedFaces = [];
       document.querySelectorAll('.board img').forEach(i => i.classList.remove('selected'));
       setStatus('Disconnected');
-      selectedFace = undefined;
     }
 
     async function placeBet() {
+      if (selectedFaces.length === 0) return alert('Select at least one face!');
       const amount = document.getElementById('betAmount').value;
-      if (selectedFace === undefined) return alert('Select a face!');
       if (!amount || parseFloat(amount) <= 0) return alert('Enter valid MON');
 
       const betValue = ethers.utils.parseUnits(amount, 18);
-      if (betValue.lt(MIN_BET)) {
-        return alert(`Minimum ${ethers.utils.formatEther(MIN_BET)} MON`);
-      }
+      if (betValue.lt(MIN_BET)) { return alert(`Minimum ${ethers.utils.formatEther(MIN_BET)} MON`); }
 
       setStatus('Submitting...');
-      const tx = await contract.placeBet(selectedFace, { value: betValue });
+      const tx = await contract.placeBet(selectedFaces, { value: betValue });
       const receipt = await tx.wait();
       showLoading();
       setTimeout(() => showResult(receipt.events, tx.hash), 5000);
     }
 
     function showLoading() {
-      const res = document.getElementById('result');
-      res.innerHTML = '';
+      const res = document.getElementById('result'); res.innerHTML = '';
       for (let i = 0; i < 3; i++) {
-        const img = document.createElement('img');
-        img.src = 'game/monad.png';
-        img.classList.add('spinning');
-        res.appendChild(img);
+        const img = document.createElement('img'); img.src = 'game/monad.png'; img.classList.add('spinning'); res.appendChild(img);
       }
     }
 
-    async function showResult(events, txHash) {
-      const res = document.getElementById('result');
-      res.innerHTML = '';
+    function showResult(events, txHash) {
+      const res = document.getElementById('result'); res.innerHTML = '';
+      const evt = events.find(e => e.event === 'BetResult' && e.transactionHash === txHash);
+      if (!evt) { setStatus('Error: no matching event'); return; }
 
-      const evt = events.find(e =>
-        e.event === 'BetResult' &&
-        e.transactionHash === txHash
-      );
-      if (!evt) {
-        setStatus('Error: no matching event');
-        return;
-      }
-
-      // unpack only the 3 face results and winAmount
-      const [, results, winAmount] = evt.args;
-
+      const [, , results, winAmount] = evt.args;
       results.forEach(id => {
         const f = faces.find(x => x.id === id);
-        const img = document.createElement('img');
-        img.src = `game/${f.src}`;
-        res.appendChild(img);
+        const img = document.createElement('img'); img.src = `game/${f.src}`; res.appendChild(img);
       });
 
       const winEth = ethers.utils.formatUnits(winAmount, 18);
-      const msg = document.createElement('p');
-      msg.innerText = `You won: ${winEth} MON`;
+      const msg = document.createElement('p'); msg.innerText = `You won: ${winEth} MON`;
       res.appendChild(msg);
-
       setStatus('Result from this transaction');
     }
 
