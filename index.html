@@ -46,22 +46,20 @@
   <script>
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
-    const providerOptions = {
-      walletconnect: {
-        package: WalletConnectProvider,
-        options: { rpc: { 10143: 'https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi' }, chainId: 10143 }
-      }
-    };
-    const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
+    const chainParams = {
+      chainId: '0x279F', // 10143
+      chainName: 'Monad Testnet',
+      nativeCurrency: { name: 'Monad Token', symbol: 'MON', decimals: 18 },
+      rpcUrls: ['https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi'],
+      blockExplorerUrls: ['https://explorer.monad.xyz']
+    };
     const CHAIN_ID = 10143;
     const CONTRACT_ADDRESS = "0x86d209D4512a846872cA28dB9C5D3B6676baBA71";
-    // Updated ABI to accept array of choices
     const CONTRACT_ABI = [
       "function placeBet(uint8[] choices) payable",
       "event BetResult(address indexed bettor, uint8[] choices, uint8[3] results, uint256 win, uint256 fee)"
     ];
-
     const MIN_BET = ethers.utils.parseEther('0.01');
 
     const faces = [
@@ -72,6 +70,17 @@
       { name: 'Cua', id: 1, src: 'cua.jpg' },
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
+
+    const providerOptions = {
+      walletconnect: {
+        package: WalletConnectProvider,
+        options: {
+          rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] },
+          chainId: CHAIN_ID
+        }
+      }
+    };
+    const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
     let provider, signer, contract, selectedFaces = [];
 
@@ -101,9 +110,7 @@
         if (selectedFaces.length < 3) {
           selectedFaces.push(id);
           imgEl.classList.add('selected');
-        } else {
-          alert('You can select up to 3 faces');
-        }
+        } else alert('You can select up to 3 faces');
       } else {
         selectedFaces.splice(idx, 1);
         imgEl.classList.remove('selected');
@@ -114,13 +121,37 @@
       setStatus('');
     }
 
+    async function ensureNetwork(providerObj) {
+      try {
+        const net = await providerObj.request({ method: 'eth_chainId' });
+        if (net !== chainParams.chainId) {
+          await providerObj.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainParams.chainId }] });
+        }
+      } catch (err) {
+        if (err.code === 4902) {
+          await providerObj.request({ method: 'wallet_addEthereumChain', params: [chainParams] });
+        } else {
+          console.error(err);
+          throw err;
+        }
+      }
+    }
+
     async function connectWallet() {
-      try { const instance = await web3Modal.connect(); provider = new ethers.providers.Web3Provider(instance, { name: 'monad-testnet', chainId: CHAIN_ID });
-      } catch (err) { alert('Provider error: ' + err.message); return; }
+      let instance;
+      if (window.ethereum) {
+        try {
+          await ensureNetwork(window.ethereum);
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          instance = window.ethereum;
+        } catch (e) {
+          console.warn('Injected failed, fallback', e);
+        }
+      }
+      if (!instance) instance = await web3Modal.connect();
+      await ensureNetwork(instance);
 
-      const net = await provider.getNetwork();
-      if (net.chainId !== CHAIN_ID) { alert('Switch to Monad Testnet (chainId 10143)'); return; }
-
+      provider = new ethers.providers.Web3Provider(instance);
       signer = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
@@ -133,14 +164,7 @@
 
     async function disconnectWallet() {
       await web3Modal.clearCachedProvider();
-      document.getElementById('btnDisconnect').style.display = 'none';
-      document.getElementById('btnConnect').style.display = 'inline-block';
-      document.getElementById('walletAddress').innerText = 'Not connected';
-      document.getElementById('betAmount').disabled = true;
-      document.getElementById('betBtn').disabled = true;
-      selectedFaces = [];
-      document.querySelectorAll('.board img').forEach(i => i.classList.remove('selected'));
-      setStatus('Disconnected');
+      window.location.reload();
     }
 
     async function placeBet() {
@@ -148,8 +172,8 @@
       const amount = document.getElementById('betAmount').value;
       if (!amount || parseFloat(amount) <= 0) return alert('Enter valid MON');
 
-      const betValue = ethers.utils.parseUnits(amount, 18);
-      if (betValue.lt(MIN_BET)) { return alert(`Minimum ${ethers.utils.formatEther(MIN_BET)} MON`); }
+      const betValue = ethers.utils.parseEther(amount);
+      if (betValue.lt(MIN_BET)) return alert(`Minimum ${ethers.utils.formatEther(MIN_BET)} MON`);
 
       setStatus('Submitting...');
       const tx = await contract.placeBet(selectedFaces, { value: betValue });
@@ -161,25 +185,24 @@
     function showLoading() {
       const res = document.getElementById('result'); res.innerHTML = '';
       for (let i = 0; i < 3; i++) {
-        const img = document.createElement('img'); img.src = 'game/monad.png'; img.classList.add('spinning'); res.appendChild(img);
+        const img = document.createElement('img');
+        img.src = 'game/monad.png'; img.classList.add('spinning'); res.appendChild(img);
       }
     }
 
     function showResult(events, txHash) {
       const res = document.getElementById('result'); res.innerHTML = '';
-      const evt = events.find(e => e.event === 'BetResult' && e.transactionHash === txHash);
-      if (!evt) { setStatus('Error: no matching event'); return; }
-
-      const [, , results, winAmount] = evt.args;
+      const evt = events.find(e => e.event === 'BetResult');
+      const results = evt.args.results;
+      const win = evt.args.win;
       results.forEach(id => {
         const f = faces.find(x => x.id === id);
         const img = document.createElement('img'); img.src = `game/${f.src}`; res.appendChild(img);
       });
-
-      const winEth = ethers.utils.formatUnits(winAmount, 18);
+      const winEth = ethers.utils.formatEther(win);
       const msg = document.createElement('p'); msg.innerText = `You won: ${winEth} MON`;
       res.appendChild(msg);
-      setStatus('Result from this transaction');
+      setStatus('Result');
     }
 
     function setStatus(msg) {
