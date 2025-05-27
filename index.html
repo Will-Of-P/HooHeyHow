@@ -11,18 +11,19 @@
   <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #f0f0f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin:0; padding:1rem; }
     .container { text-align: center; }
-    .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; margin-bottom: 20px; }
-    .board img, .result img { width: 100px; height: 100px; border: 2px solid #333; border-radius: 10px; cursor: pointer; }
-    .board img.selected { border: 4px solid red; }
-    input, button { padding: 10px; font-size: 16px; margin: 5px; }
-    button { background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .result { margin-top: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .spinning { animation: spin 1s linear infinite; }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-    #status { color: #555; font-size: 0.9rem; margin-top: 1rem; }
+    .board { display: grid; grid-template-columns: repeat(3,100px); gap:10px; margin-bottom:20px; }
+    .board img, .result img { width:100px; height:100px; border:2px solid #333; border-radius:10px; cursor:pointer; }
+    .board img.selected { border:4px solid red; }
+    input, button { padding:10px; font-size:16px; margin:5px; width:100%; }
+    button { background:#28a745; color:#fff; border:none; border-radius:5px; cursor:pointer; }
+    button:disabled { opacity:0.6; cursor:not-allowed; }
+    .result { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:20px; }
+    .spinning { animation:spin 1s linear infinite; }
+    @keyframes spin { 100% { transform:rotate(360deg);} }
+    #status { color:#555; font-size:0.9rem; margin-top:1rem; }
   </style>
 </head>
 <body>
@@ -35,10 +36,8 @@
       <p id="walletAddress">Not connected</p>
     </div>
     <div class="board" id="faces"></div>
-    <div>
-      <input type="number" id="betAmount" placeholder="Amount of MON (>= 0.01)" min="0" step="0.01" disabled />
-      <button id="betBtn" disabled>Place Bet</button>
-    </div>
+    <input type="number" id="betAmount" placeholder="Amount of MON (>= 0.01)" min="0.01" step="0.01" disabled />
+    <button id="betBtn" disabled>Place Bet</button>
     <div class="result" id="result"></div>
     <p id="status"></p>
   </div>
@@ -46,9 +45,9 @@
   <script>
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
-
+    
     const chainParams = {
-      chainId: '0x279F', // 10143
+      chainId: '0x279F',
       chainName: 'Monad Testnet',
       nativeCurrency: { name: 'Monad Token', symbol: 'MON', decimals: 18 },
       rpcUrls: ['https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi'],
@@ -74,24 +73,20 @@
     const providerOptions = {
       walletconnect: {
         package: WalletConnectProvider,
-        options: {
-          rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] },
-          chainId: CHAIN_ID
-        }
+        options: { rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] }, chainId: CHAIN_ID }
       }
     };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
     let provider, signer, contract, selectedFaces = [];
 
-    window.onload = init;
-    function init() {
+    window.onload = () => {
       renderBoard();
-      document.getElementById('btnConnect').onclick = connectWallet;
-      document.getElementById('btnDisconnect').onclick = disconnectWallet;
+      document.getElementById('btnConnect').onclick = connect;
+      document.getElementById('btnDisconnect').onclick = disconnect;
       document.getElementById('betBtn').onclick = placeBet;
-      if (web3Modal.cachedProvider) connectWallet();
-    }
+      if (web3Modal.cachedProvider) connect();
+    };
 
     function renderBoard() {
       const board = document.getElementById('faces');
@@ -104,110 +99,80 @@
       });
     }
 
-    function toggleFace(id, imgEl) {
+    function toggleFace(id, img) {
       const idx = selectedFaces.indexOf(id);
-      if (idx === -1) {
-        if (selectedFaces.length < 3) {
-          selectedFaces.push(id);
-          imgEl.classList.add('selected');
-        } else alert('You can select up to 3 faces');
-      } else {
-        selectedFaces.splice(idx, 1);
-        imgEl.classList.remove('selected');
+      if (idx === -1 && selectedFaces.length < 3) {
+        selectedFaces.push(id);
+        img.classList.add('selected');
+      } else if (idx !== -1) {
+        selectedFaces.splice(idx,1);
+        img.classList.remove('selected');
       }
-      const valid = selectedFaces.length >= 1;
+      const valid = selectedFaces.length>0;
       document.getElementById('betAmount').disabled = !valid;
       document.getElementById('betBtn').disabled = !valid;
       setStatus('');
     }
 
-    async function ensureNetwork(providerObj) {
+    async function ensureNetwork(obj) {
       try {
-        const net = await providerObj.request({ method: 'eth_chainId' });
-        if (net !== chainParams.chainId) {
-          await providerObj.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainParams.chainId }] });
-        }
-      } catch (err) {
-        if (err.code === 4902) {
-          await providerObj.request({ method: 'wallet_addEthereumChain', params: [chainParams] });
-        } else {
-          console.error(err);
-          throw err;
-        }
+        const net = await obj.request({ method:'eth_chainId'});
+        if (net!==chainParams.chainId) await obj.request({ method:'wallet_switchEthereumChain', params:[{chainId:chainParams.chainId}] });
+      } catch(e) {
+        if(e.code===4902) await obj.request({ method:'wallet_addEthereumChain', params:[chainParams] });
+        else throw e;
       }
     }
 
-    async function connectWallet() {
-      let instance;
-      if (window.ethereum) {
-        try {
-          await ensureNetwork(window.ethereum);
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          instance = window.ethereum;
-        } catch (e) {
-          console.warn('Injected failed, fallback', e);
-        }
+    async function connect() {
+      let inst;
+      if(window.ethereum) {
+        try { await ensureNetwork(window.ethereum); await window.ethereum.request({method:'eth_requestAccounts'}); inst=window.ethereum; }
+        catch{console.warn('Injected fail');}
       }
-      if (!instance) instance = await web3Modal.connect();
-      await ensureNetwork(instance);
-
-      provider = new ethers.providers.Web3Provider(instance);
+      if(!inst) inst = await web3Modal.connect();
+      await ensureNetwork(inst);
+      provider = new ethers.providers.Web3Provider(inst);
       signer = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
       const addr = await signer.getAddress();
       document.getElementById('walletAddress').innerText = addr;
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
-      setStatus('Connected');
     }
 
-    async function disconnectWallet() {
-      await web3Modal.clearCachedProvider();
-      window.location.reload();
-    }
+    function disconnect() { web3Modal.clearCachedProvider(); window.location.reload(); }
 
     async function placeBet() {
-      if (selectedFaces.length === 0) return alert('Select at least one face!');
-      const amount = document.getElementById('betAmount').value;
-      if (!amount || parseFloat(amount) <= 0) return alert('Enter valid MON');
-
-      const betValue = ethers.utils.parseEther(amount);
-      if (betValue.lt(MIN_BET)) return alert(`Minimum ${ethers.utils.formatEther(MIN_BET)} MON`);
+      if(selectedFaces.length===0) return alert('Select at least one face!');
+      const amt = document.getElementById('betAmount').value;
+      if(!amt||parseFloat(amt)<=0) return alert('Enter valid MON');
+      const val = ethers.utils.parseEther(amt);
+      if(val.lt(MIN_BET)) return alert(`Min ${ethers.utils.formatEther(MIN_BET)} MON`);
 
       setStatus('Submitting...');
-      const tx = await contract.placeBet(selectedFaces, { value: betValue });
+      const tx = await contract.placeBet(selectedFaces, {value:val});
       const receipt = await tx.wait();
       showLoading();
-      setTimeout(() => showResult(receipt.events, tx.hash), 5000);
+      setTimeout(()=>showResult(receipt.events),5000);
     }
 
     function showLoading() {
-      const res = document.getElementById('result'); res.innerHTML = '';
-      for (let i = 0; i < 3; i++) {
-        const img = document.createElement('img');
-        img.src = 'game/monad.png'; img.classList.add('spinning'); res.appendChild(img);
-      }
-    }
-
-    function showResult(events, txHash) {
-      const res = document.getElementById('result'); res.innerHTML = '';
-      const evt = events.find(e => e.event === 'BetResult');
-      const results = evt.args.results;
-      const win = evt.args.win;
-      results.forEach(id => {
-        const f = faces.find(x => x.id === id);
-        const img = document.createElement('img'); img.src = `game/${f.src}`; res.appendChild(img);
-      });
-      const winEth = ethers.utils.formatEther(win);
-      const msg = document.createElement('p'); msg.innerText = `You won: ${winEth} MON`;
-      res.appendChild(msg);
+      const r=document.getElementById('result'); r.innerHTML='';
+      for(let i=0;i<3;i++){const img=document.createElement('img');img.src='game/monad.png';img.className='spinning';r.appendChild(img);}  }
+    function showResult(events){
+      const r=document.getElementById('result'); r.innerHTML='';
+      const evt=events.find(e=>e.event==='BetResult');
+      const results=evt.args.results;
+      const win=evt.args.win;
+      results.forEach(id=>{const f=faces.find(x=>x.id===id);const img=document.createElement('img');img.src=`game/${f.src}`;r.appendChild(img);});
+      const amount=ethers.utils.formatEther(win);
+      const msg=document.createElement('p');msg.innerText=`You won: ${amount} MON`;
+      r.appendChild(msg);
       setStatus('Result');
     }
 
-    function setStatus(msg) {
-      document.getElementById('status').innerText = msg;
-    }
+    function setStatus(m){document.getElementById('status').innerText=m;}
   </script>
 </body>
 </html>
