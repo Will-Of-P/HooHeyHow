@@ -68,7 +68,7 @@
     const CONTRACT_ADDRESS = "0x1C538a1E0F0D5a8430010315b9659b80Ba99E9E1";
     const CONTRACT_ABI = [
       "function placeBet(uint8[] choices) payable",
-      "function getRecentBauCua() view returns (tuple(uint8[3], uint256)[20])",
+      "function getRecentBauCua() view returns (tuple(uint8[3] results, uint256 timestamp)[20])",
       "event BetResult(address indexed bettor, uint8[] choices, uint8[3] results, uint256 totalWin)"
     ];
     const MIN_BET = ethers.utils.parseEther('0.01');
@@ -96,13 +96,12 @@
     };
 
     function renderBoard() {
-      const board = document.getElementById('faces');
       faces.forEach(f => {
         const img = document.createElement('img');
         img.src = `game/${f.src}`;
         img.alt = f.name;
         img.onclick = () => toggleFace(f.id, img);
-        board.appendChild(img);
+        document.getElementById('faces').appendChild(img);
       });
     }
 
@@ -124,7 +123,7 @@
     async function ensureNetwork(obj) {
       try {
         const net = await obj.request({ method:'eth_chainId'});
-        if(net!==chainParams.chainId)
+        if (net!==chainParams.chainId)
           await obj.request({ method:'wallet_switchEthereumChain', params:[{chainId:chainParams.chainId}] });
       } catch(e) {
         if (e.code===4902)
@@ -135,14 +134,14 @@
 
     async function connect() {
       let inst;
-      if(window.ethereum) {
+      if (window.ethereum) {
         try {
           await ensureNetwork(window.ethereum);
-          await window.ethereum.request({method:'eth_requestAccounts'});
+          await window.ethereum.request({ method:'eth_requestAccounts'});
           inst = window.ethereum;
         } catch {}
       }
-      if(!inst) inst = await web3Modal.connect();
+      if (!inst) inst = await web3Modal.connect();
       await ensureNetwork(inst);
 
       provider = new ethers.providers.Web3Provider(inst);
@@ -153,15 +152,31 @@
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
 
-      // Event listener: update history on result
-      contract.on("BetResult", () => {
+      // Event listener: show result and refresh history
+      contract.on("BetResult", (bettor, choices, results, totalWin) => {
+        const addr = signer.getAddress().then(a => a.toLowerCase());
+        if (bettor.toLowerCase() !== addr) return;
+        const resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = '';
+        // hiển thị kết quả 3 mặt
+        results.forEach(id => {
+          const face = faces.find(f => f.id === id);
+          const img = document.createElement('img');
+          img.src = `game/${face.src}`;
+          img.alt = face.name;
+          resultDiv.appendChild(img);
+        });
+        // hiển thị thắng tiền
+        const winAmt = ethers.utils.formatEther(totalWin);
+        const msg = document.createElement('p');
+        msg.innerText = `You won: ${winAmt} MON`;
+        resultDiv.appendChild(msg);
+        setStatus('Result received');
         fetchBauCuaHistory();
       });
 
-      // Initial history load
+      // Initial history load + auto-refresh
       await fetchBauCuaHistory();
-
-      // Auto-refresh every 30s
       setInterval(fetchBauCuaHistory, 30000);
     }
 
@@ -171,39 +186,34 @@
     }
 
     async function placeBet() {
-      if(selectedFaces.length===0) return alert('Select at least one face!');
+      if (selectedFaces.length === 0) return alert('Select at least one face!');
       const amt = document.getElementById('betAmount').value;
-      if(!amt||parseFloat(amt)<=0) return alert('Enter valid MON');
+      if (!amt || parseFloat(amt) <= 0) return alert('Enter valid MON');
       const val = ethers.utils.parseEther(amt);
-      if(val.lt(MIN_BET)) return alert(`Min ${ethers.utils.formatEther(MIN_BET)} MON`);
+      if (val.lt(MIN_BET)) return alert(`Min ${ethers.utils.formatEther(MIN_BET)} MON`);
 
       setStatus('Submitting transaction...');
       showLoading();
-      fetchBauCuaHistory();
-
       const tx = await contract.placeBet(selectedFaces, { value: val });
       await tx.wait();
       setStatus('Waiting for BetResult event...');
     }
 
     function showLoading() {
-      const r=document.getElementById('result');
-      r.innerHTML='';
-      for(let i=0;i<3;i++){
-        const img=document.createElement('img');
-        img.src='game/monad.png';
-        img.className='spinning';
+      const r = document.getElementById('result');
+      r.innerHTML = '';
+      for (let i = 0; i < 3; i++) {
+        const img = document.createElement('img');
+        img.src = 'game/monad.png';
+        img.className = 'spinning';
         r.appendChild(img);
       }
-      fetchBauCuaHistory();
     }
-
-    function setStatus(m) { document.getElementById('status').innerText = m; }
 
     async function fetchBauCuaHistory() {
       if (!contract) return;
       const raw = await contract.getRecentBauCua();
-      const entries = raw.map(e => ({ faces: e[0].map(d => d.toNumber()), ts: e[1].toNumber() }))
+      const entries = raw.map(e => ({ faces: e[0], ts: e[1].toNumber() }))
         .filter(e => e.ts > 0)
         .sort((a, b) => b.ts - a.ts)
         .slice(0, 20);
@@ -214,7 +224,8 @@
       entries.forEach(e => {
         const tr = document.createElement('tr');
         const tdTime = document.createElement('td');
-        tdTime.innerText = new Date(e.ts * 1000).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        tdTime.innerText = new Date(e.ts * 1000)
+          .toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
         tr.appendChild(tdTime);
         e.faces.forEach(faceId => {
           const td = document.createElement('td');
