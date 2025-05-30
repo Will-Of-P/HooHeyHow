@@ -95,6 +95,10 @@
       if (web3Modal.cachedProvider) connect();
     };
 
+    function setStatus(msg) {
+      document.getElementById('status').innerText = msg;
+    }
+
     function renderBoard() {
       faces.forEach(f => {
         const img = document.createElement('img');
@@ -152,13 +156,12 @@
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
 
-      // Event listener: show result and refresh history
-      contract.on("BetResult", (bettor, choices, results, totalWin) => {
-        const addr = signer.getAddress().then(a => a.toLowerCase());
-        if (bettor.toLowerCase() !== addr) return;
+      contract.on("BetResult", async (bettor, choices, results, totalWin) => {
+        const userAddr = (await signer.getAddress()).toLowerCase();
+        if (bettor.toLowerCase() !== userAddr) return;
+        // Show result
         const resultDiv = document.getElementById('result');
         resultDiv.innerHTML = '';
-        // hiển thị kết quả 3 mặt
         results.forEach(id => {
           const face = faces.find(f => f.id === id);
           const img = document.createElement('img');
@@ -166,7 +169,6 @@
           img.alt = face.name;
           resultDiv.appendChild(img);
         });
-        // hiển thị thắng tiền
         const winAmt = ethers.utils.formatEther(totalWin);
         const msg = document.createElement('p');
         msg.innerText = `You won: ${winAmt} MON`;
@@ -175,7 +177,6 @@
         fetchBauCuaHistory();
       });
 
-      // Initial history load + auto-refresh
       await fetchBauCuaHistory();
       setInterval(fetchBauCuaHistory, 30000);
     }
