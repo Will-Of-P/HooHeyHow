@@ -13,17 +13,23 @@
   <style>
     * { box-sizing: border-box; }
     body { font-family: Arial, sans-serif; background: #f0f0f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin:0; padding:1rem; }
-    .container { text-align: center; }
-    .board { display: grid; grid-template-columns: repeat(3,100px); gap:10px; margin-bottom:20px; }
+    .container { text-align: center; width: 100%; max-width: 480px; background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+    .board { display: grid; grid-template-columns: repeat(3,100px); gap:10px; margin-bottom:20px; justify-content: center; }
     .board img, .result img { width:100px; height:100px; border:2px solid #333; border-radius:10px; cursor:pointer; }
     .board img.selected { border:4px solid red; }
-    input, button { padding:10px; font-size:16px; margin:5px; width:100%; }
+    input, button { padding:10px; font-size:16px; margin:5px 0; width:100%; }
     button { background:#28a745; color:#fff; border:none; border-radius:5px; cursor:pointer; }
     button:disabled { opacity:0.6; cursor:not-allowed; }
     .result { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:20px; }
     .spinning { animation:spin 1s linear infinite; }
     @keyframes spin { 100% { transform:rotate(360deg);} }
     #status { color:#555; font-size:0.9rem; margin-top:1rem; }
+    /* History table */
+    #historyContainer { margin-top:2rem; }
+    #historyContainer h3 { margin-bottom: 0.5rem; }
+    #historyTable { width:100%; border-collapse: collapse; }
+    #historyTable th, #historyTable td { padding:8px; border:1px solid #ccc; text-align: center; }
+    #historyTable img { width:40px; height:40px; }
   </style>
 </head>
 <body>
@@ -38,23 +44,31 @@
     <button id="betBtn" disabled>Place Bet</button>
     <div class="result" id="result"></div>
     <p id="status"></p>
+
+    <!-- History 20 ván Bầu Cua -->
+    <div id="historyContainer">
+      <h3>Recent 20 Games</h3>
+      <table id="historyTable">
+        <thead>
+          <tr>
+            <th>Time</th><th>Die 1</th><th>Die 2</th><th>Die 3</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
 
-    const chainParams = {
-      chainId: '0x279F',
-      chainName: 'Monad Testnet',
-      nativeCurrency: { name: 'Monad Token', symbol: 'MON', decimals: 18 },
-      rpcUrls: ['https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi'],
-      blockExplorerUrls: ['https://explorer.monad.xyz']
-    };
+    const chainParams = { chainId: '0x279F', chainName: 'Monad Testnet', nativeCurrency: { name: 'Monad Token', symbol: 'MON', decimals: 18 }, rpcUrls: ['https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi'], blockExplorerUrls: ['https://explorer.monad.xyz'] };
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0x27e16641cA92988B529a7d42068cA63cC6Fde5eb";
+    const CONTRACT_ADDRESS = "0x1C538a1E0F0D5a8430010315b9659b80Ba99E9E1";
     const CONTRACT_ABI = [
       "function placeBet(uint8[] choices) payable",
+      "function getRecentBauCua() view returns (tuple(uint8[3], uint256)[20])",
       "event BetResult(address indexed bettor, uint8[] choices, uint8[3] results, uint256 totalWin)"
     ];
     const MIN_BET = ethers.utils.parseEther('0.01');
@@ -68,12 +82,7 @@
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
 
-    const providerOptions = {
-      walletconnect: {
-        package: WalletConnectProvider,
-        options: { rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] }, chainId: CHAIN_ID }
-      }
-    };
+    const providerOptions = { walletconnect: { package: WalletConnectProvider, options: { rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] }, chainId: CHAIN_ID } } };
     const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
 
     let provider, signer, contract, selectedFaces = [];
@@ -106,7 +115,7 @@
         selectedFaces.splice(idx,1);
         img.classList.remove('selected');
       }
-      const valid = selectedFaces.length>0;
+      const valid = selectedFaces.length > 0;
       document.getElementById('betAmount').disabled = !valid;
       document.getElementById('betBtn').disabled = !valid;
       setStatus('');
@@ -115,7 +124,7 @@
     async function ensureNetwork(obj) {
       try {
         const net = await obj.request({ method:'eth_chainId'});
-        if (net!==chainParams.chainId)
+        if(net!==chainParams.chainId)
           await obj.request({ method:'wallet_switchEthereumChain', params:[{chainId:chainParams.chainId}] });
       } catch(e) {
         if (e.code===4902)
@@ -140,36 +149,20 @@
       signer = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-      const addr = await signer.getAddress();
-      document.getElementById('walletAddress').innerText = addr;
+      document.getElementById('walletAddress').innerText = await signer.getAddress();
       document.getElementById('btnConnect').style.display = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
 
-      // --- Lắng nghe sự kiện BetResult ---
-      contract.on("BetResult", (bettor, choices, results, totalWin) => {
-        if (bettor.toLowerCase() !== addr.toLowerCase()) return;
-
-        // Clear loading/spinner
-        const r = document.getElementById('result');
-        r.innerHTML = '';
-
-        // Hiển thị kết quả mặt xúc xắc
-        results.forEach(id => {
-          const face = faces.find(f => f.id === id);
-          const img = document.createElement('img');
-          img.src = `game/${face.src}`;
-          img.alt = face.name;
-          r.appendChild(img);
-        });
-
-        // Hiển thị tiền thắng
-        const winAmt = ethers.utils.formatEther(totalWin);
-        const msg = document.createElement('p');
-        msg.innerText = `You won: ${winAmt} MON`;
-        r.appendChild(msg);
-
-        setStatus('Result received via event');
+      // Event listener: update history on result
+      contract.on("BetResult", () => {
+        fetchBauCuaHistory();
       });
+
+      // Initial history load
+      await fetchBauCuaHistory();
+
+      // Auto-refresh every 30s
+      setInterval(fetchBauCuaHistory, 30000);
     }
 
     function disconnect() {
@@ -186,6 +179,7 @@
 
       setStatus('Submitting transaction...');
       showLoading();
+      fetchBauCuaHistory();
 
       const tx = await contract.placeBet(selectedFaces, { value: val });
       await tx.wait();
@@ -201,10 +195,38 @@
         img.className='spinning';
         r.appendChild(img);
       }
+      fetchBauCuaHistory();
     }
 
-    function setStatus(m) {
-      document.getElementById('status').innerText = m;
+    function setStatus(m) { document.getElementById('status').innerText = m; }
+
+    async function fetchBauCuaHistory() {
+      if (!contract) return;
+      const raw = await contract.getRecentBauCua();
+      const entries = raw.map(e => ({ faces: e[0].map(d => d.toNumber()), ts: e[1].toNumber() }))
+        .filter(e => e.ts > 0)
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 20);
+
+      const body = document.getElementById('historyBody');
+      body.innerHTML = '';
+
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+        const tdTime = document.createElement('td');
+        tdTime.innerText = new Date(e.ts * 1000).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        tr.appendChild(tdTime);
+        e.faces.forEach(faceId => {
+          const td = document.createElement('td');
+          const face = faces.find(f => f.id === faceId);
+          const img = document.createElement('img');
+          img.src = `game/${face.src}`;
+          img.alt = face.name;
+          td.appendChild(img);
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
     }
   </script>
 </body>
