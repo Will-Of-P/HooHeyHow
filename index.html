@@ -12,24 +12,99 @@
 
   <style>
     * { box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; background: #f0f0f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin:0; padding:1rem; }
-    .container { text-align: center; width: 100%; max-width: 480px; background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
-    .board { display: grid; grid-template-columns: repeat(3,100px); gap:10px; margin-bottom:20px; justify-content: center; }
-    .board img, .result img { width:100px; height:100px; border:2px solid #333; border-radius:10px; cursor:pointer; }
-    .board img.selected { border:4px solid red; }
-    input, button { padding:10px; font-size:16px; margin:5px 0; width:100%; }
-    button { background:#28a745; color:#fff; border:none; border-radius:5px; cursor:pointer; }
-    button:disabled { opacity:0.6; cursor:not-allowed; }
-    .result { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:20px; }
-    .spinning { animation:spin 1s linear infinite; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin:0;
+      padding:1rem;
+    }
+    .container {
+      text-align: center;
+      width: 100%;
+      max-width: 480px;
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3,100px);
+      gap:10px;
+      margin-bottom:20px;
+      justify-content: center;
+    }
+    .board img, .result img {
+      width:100px;
+      height:100px;
+      border:2px solid #333;
+      border-radius:10px;
+      cursor:pointer;
+    }
+    .board img.selected {
+      border:4px solid red;
+    }
+    input, button {
+      padding:10px;
+      font-size:16px;
+      margin:5px 0;
+      width:100%;
+    }
+    /* Set max="15" so browser validation helps block ≥ 15 */
+    input[type="number"] {
+      /* no extra styling needed; max attribute restricts value */
+    }
+    button {
+      background:#28a745;
+      color:#fff;
+      border:none;
+      border-radius:5px;
+      cursor:pointer;
+    }
+    button:disabled {
+      opacity:0.6;
+      cursor:not-allowed;
+    }
+    .result {
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:20px;
+    }
+    .spinning {
+      animation:spin 1s linear infinite;
+    }
     @keyframes spin { 100% { transform:rotate(360deg);} }
-    #status { color:#555; font-size:0.9rem; margin-top:1rem; }
+    #status {
+      color:#555;
+      font-size:0.9rem;
+      margin-top:1rem;
+    }
     /* History table */
-    #historyContainer { margin-top:2rem; }
-    #historyContainer h3 { margin-bottom: 0.5rem; }
-    #historyTable { width:100%; border-collapse: collapse; }
-    #historyTable th, #historyTable td { padding:8px; border:1px solid #ccc; text-align: center; }
-    #historyTable img { width:40px; height:40px; }
+    #historyContainer {
+      margin-top:2rem;
+    }
+    #historyContainer h3 {
+      margin-bottom: 0.5rem;
+    }
+    #historyTable {
+      width:100%;
+      border-collapse: collapse;
+    }
+    #historyTable th, #historyTable td {
+      padding:8px;
+      border:1px solid #ccc;
+      text-align: center;
+    }
+    #historyTable img {
+      width:40px;
+      height:40px;
+    }
   </style>
 </head>
 <body>
@@ -39,9 +114,24 @@
       <button id="btnDisconnect" style="display:none; background:#dc3545;">Disconnect Wallet</button>
       <p id="walletAddress">Not connected</p>
     </div>
+
     <div class="board" id="faces"></div>
-    <input type="number" id="betAmount" placeholder="Amount of MON (>= 0.01)" min="0.01" step="0.01" disabled />
+
+    <!-- 
+      • min="0.01" ensures at least 0.01 MON
+      • max="15" prevents entering ≥ 15 MON
+    -->
+    <input
+      type="number"
+      id="betAmount"
+      placeholder="Amount of MON (0.01 – 15)"
+      min="0.01"
+      step="0.01"
+      max="15"
+      disabled
+    />
     <button id="betBtn" disabled>Place Bet</button>
+
     <div class="result" id="result"></div>
     <p id="status"></p>
 
@@ -63,15 +153,23 @@
     const { ethers } = window.ethers;
     const WalletConnectProvider = window.WalletConnectProvider.default;
 
-    const chainParams = { chainId: '0x279F', chainName: 'Monad Testnet', nativeCurrency: { name: 'Monad Token', symbol: 'MON', decimals: 18 }, rpcUrls: ['https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi'], blockExplorerUrls: ['https://explorer.monad.xyz'] };
+    const chainParams = {
+      chainId: '0x279F',
+      chainName: 'Monad Testnet',
+      nativeCurrency: { name: 'Monad Token', symbol: 'MON', decimals: 18 },
+      rpcUrls: ['https://monad-testnet.g.alchemy.com/v2/tzvd5nlbtwh_aQQLFCNjVmXP8gkZFHZi'],
+      blockExplorerUrls: ['https://explorer.monad.xyz']
+    };
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0x559e00D6d8901E2a658c30FEeFdE5f319cBd0f82";
+    const CONTRACT_ADDRESS = "0x5c10D58c70F1bfc2A4e842a62215f4008fda7dcf";
     const CONTRACT_ABI = [
       "function placeBet(uint8[] choices) payable",
       "function getRecentBauCua() view returns (tuple(uint8[3] results, uint256 timestamp)[20])",
       "event BetResult(address indexed bettor, uint8[] choices, uint8[3] results, uint256 totalWin)"
     ];
+
     const MIN_BET = ethers.utils.parseEther('0.01');
+    const MAX_BET = ethers.utils.parseEther('15.0');
 
     const faces = [
       { name: 'Nai', id: 5, src: 'nai.jpg' },
@@ -82,17 +180,56 @@
       { name: 'Tôm', id: 4, src: 'tom.jpg' }
     ];
 
-    const providerOptions = { walletconnect: { package: WalletConnectProvider, options: { rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] }, chainId: CHAIN_ID } } };
-    const web3Modal = new window.Web3Modal.default({ cacheProvider: true, providerOptions });
+    const providerOptions = {
+      walletconnect: {
+        package: WalletConnectProvider,
+        options: {
+          rpc: { [CHAIN_ID]: chainParams.rpcUrls[0] },
+          chainId: CHAIN_ID
+        }
+      }
+    };
+    const web3Modal = new window.Web3Modal.default({
+      cacheProvider: true,
+      providerOptions
+    });
 
-    let provider, signer, contract, selectedFaces = [];
+    let provider, signer, contract;
+    let selectedFaces = [];
 
     window.onload = () => {
       renderBoard();
       document.getElementById('btnConnect').onclick = connect;
       document.getElementById('btnDisconnect').onclick = disconnect;
       document.getElementById('betBtn').onclick = placeBet;
-      if (web3Modal.cachedProvider) connect();
+
+      // Whenever user types into betAmount, re-check < 15:
+      document.getElementById('betAmount').addEventListener('input', () => {
+        const input = document.getElementById('betAmount');
+        const val = parseFloat(input.value);
+
+        if (!input.value) {
+          // No value → disable button, clear status
+          document.getElementById('betBtn').disabled = true;
+          setStatus('');
+        } else if (isNaN(val) || val < 0.01) {
+          // < 0.01 → disable, show minimum warning
+          document.getElementById('betBtn').disabled = true;
+          setStatus('Bet must be at least 0.01 MON');
+        } else if (val >= 15) {
+          // ≥ 15 → disable, show "max" warning
+          document.getElementById('betBtn').disabled = true;
+          setStatus('Bet must be less than 15 MON');
+        } else {
+          // Valid amount < 15 and ≥ 0.01 → enable if faces selected
+          document.getElementById('betBtn').disabled = selectedFaces.length === 0;
+          setStatus('');
+        }
+      });
+
+      if (web3Modal.cachedProvider) {
+        connect();
+      }
     };
 
     function setStatus(msg) {
@@ -100,12 +237,13 @@
     }
 
     function renderBoard() {
+      const board = document.getElementById('faces');
       faces.forEach(f => {
         const img = document.createElement('img');
         img.src = `game/${f.src}`;
         img.alt = f.name;
         img.onclick = () => toggleFace(f.id, img);
-        document.getElementById('faces').appendChild(img);
+        board.appendChild(img);
       });
     }
 
@@ -115,24 +253,34 @@
         selectedFaces.push(id);
         img.classList.add('selected');
       } else if (idx !== -1) {
-        selectedFaces.splice(idx,1);
+        selectedFaces.splice(idx, 1);
         img.classList.remove('selected');
       }
-      const valid = selectedFaces.length > 0;
-      document.getElementById('betAmount').disabled = !valid;
-      document.getElementById('betBtn').disabled = !valid;
+      // Enable betAmount & betBtn only if at least one face chosen
+      const validFaces = selectedFaces.length > 0;
+      document.getElementById('betAmount').disabled = !validFaces;
+      document.getElementById('betBtn').disabled = !validFaces;
       setStatus('');
     }
 
     async function ensureNetwork(obj) {
       try {
-        const net = await obj.request({ method:'eth_chainId'});
-        if (net!==chainParams.chainId)
-          await obj.request({ method:'wallet_switchEthereumChain', params:[{chainId:chainParams.chainId}] });
-      } catch(e) {
-        if (e.code===4902)
-          await obj.request({ method:'wallet_addEthereumChain', params:[chainParams] });
-        else throw e;
+        const net = await obj.request({ method:'eth_chainId' });
+        if (net !== chainParams.chainId) {
+          await obj.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: chainParams.chainId }]
+          });
+        }
+      } catch (e) {
+        if (e.code === 4902) {
+          await obj.request({
+            method: 'wallet_addEthereumChain',
+            params: [ chainParams ]
+          });
+        } else {
+          throw e;
+        }
       }
     }
 
@@ -141,25 +289,31 @@
       if (window.ethereum) {
         try {
           await ensureNetwork(window.ethereum);
-          await window.ethereum.request({ method:'eth_requestAccounts'});
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
           inst = window.ethereum;
-        } catch {}
+        } catch {
+          // If user rejects or no injected, fallback to Web3Modal
+        }
       }
-      if (!inst) inst = await web3Modal.connect();
+      if (!inst) {
+        inst = await web3Modal.connect();
+      }
       await ensureNetwork(inst);
 
       provider = new ethers.providers.Web3Provider(inst);
-      signer = provider.getSigner();
+      signer   = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-      document.getElementById('walletAddress').innerText = await signer.getAddress();
-      document.getElementById('btnConnect').style.display = 'none';
+      document.getElementById('walletAddress').innerText =
+        await signer.getAddress();
+      document.getElementById('btnConnect').style.display    = 'none';
       document.getElementById('btnDisconnect').style.display = 'inline-block';
 
       contract.on("BetResult", async (bettor, choices, results, totalWin) => {
         const userAddr = (await signer.getAddress()).toLowerCase();
         if (bettor.toLowerCase() !== userAddr) return;
-        // Show result
+
+        // Show dice images for results
         const resultDiv = document.getElementById('result');
         resultDiv.innerHTML = '';
         results.forEach(id => {
@@ -173,6 +327,7 @@
         const msg = document.createElement('p');
         msg.innerText = `You won: ${winAmt} MON`;
         resultDiv.appendChild(msg);
+
         setStatus('Result received');
         fetchBauCuaHistory();
       });
@@ -187,17 +342,36 @@
     }
 
     async function placeBet() {
-      if (selectedFaces.length === 0) return alert('Select at least one face!');
-      const amt = document.getElementById('betAmount').value;
-      if (!amt || parseFloat(amt) <= 0) return alert('Enter valid MON');
-      const val = ethers.utils.parseEther(amt);
-      if (val.lt(MIN_BET)) return alert(`Min ${ethers.utils.formatEther(MIN_BET)} MON`);
+      if (selectedFaces.length === 0) {
+        alert('Select at least one face!');
+        return;
+      }
+      const amtStr = document.getElementById('betAmount').value;
+      if (!amtStr) {
+        alert('Enter an amount');
+        return;
+      }
+      const val = ethers.utils.parseEther(amtStr);
+      if (val.lt(MIN_BET)) {
+        alert(`Minimum bet is ${ethers.utils.formatEther(MIN_BET)} MON`);
+        return;
+      }
+      if (val.gte(MAX_BET)) {
+        alert('Bet must be less than 15 MON');
+        return;
+      }
 
       setStatus('Submitting transaction...');
       showLoading();
-      const tx = await contract.placeBet(selectedFaces, { value: val });
-      await tx.wait();
-      setStatus('Waiting for BetResult event...');
+
+      try {
+        const tx = await contract.placeBet(selectedFaces, { value: val });
+        await tx.wait();
+        setStatus('Waiting for BetResult event...');
+      } catch (err) {
+        console.error(err);
+        setStatus('Transaction failed or rejected');
+      }
     }
 
     function showLoading() {
@@ -213,32 +387,38 @@
 
     async function fetchBauCuaHistory() {
       if (!contract) return;
-      const raw = await contract.getRecentBauCua();
-      const entries = raw.map(e => ({ faces: e[0], ts: e[1].toNumber() }))
-        .filter(e => e.ts > 0)
-        .sort((a, b) => b.ts - a.ts)
-        .slice(0, 20);
+      try {
+        const raw = await contract.getRecentBauCua();
+        const entries = raw
+          .map(e => ({ faces: e[0], ts: e[1].toNumber() }))
+          .filter(e => e.ts > 0)
+          .sort((a, b) => b.ts - a.ts)
+          .slice(0, 20);
 
-      const body = document.getElementById('historyBody');
-      body.innerHTML = '';
+        const body = document.getElementById('historyBody');
+        body.innerHTML = '';
 
-      entries.forEach(e => {
-        const tr = document.createElement('tr');
-        const tdTime = document.createElement('td');
-        tdTime.innerText = new Date(e.ts * 1000)
-          .toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-        tr.appendChild(tdTime);
-        e.faces.forEach(faceId => {
-          const td = document.createElement('td');
-          const face = faces.find(f => f.id === faceId);
-          const img = document.createElement('img');
-          img.src = `game/${face.src}`;
-          img.alt = face.name;
-          td.appendChild(img);
-          tr.appendChild(td);
+        entries.forEach(e => {
+          const tr = document.createElement('tr');
+          const tdTime = document.createElement('td');
+          tdTime.innerText = new Date(e.ts * 1000)
+            .toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+          tr.appendChild(tdTime);
+
+          e.faces.forEach(faceId => {
+            const td = document.createElement('td');
+            const face = faces.find(f => f.id === faceId);
+            const img = document.createElement('img');
+            img.src = `game/${face.src}`;
+            img.alt = face.name;
+            td.appendChild(img);
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
         });
-        body.appendChild(tr);
-      });
+      } catch (err) {
+        console.error('Error fetching history:', err);
+      }
     }
   </script>
 </body>
