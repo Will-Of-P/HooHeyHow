@@ -216,7 +216,7 @@
           // < 0.01 → disable, show minimum warning
           document.getElementById('betBtn').disabled = true;
           setStatus('Bet must be at least 0.01 MON');
-        } else if (val >= 15) {
+        } else if (val > 15) {
           // ≥ 15 → disable, show "max" warning
           document.getElementById('betBtn').disabled = true;
           setStatus('Bet must be less than 15 MON');
