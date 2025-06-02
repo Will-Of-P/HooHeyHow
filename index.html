@@ -127,7 +127,7 @@
       placeholder="Amount of MON (0.01 – 15)"
       min="0.01"
       step="0.01"
-      max="15"
+      max="15.01"
       disabled
     />
     <button id="betBtn" disabled>Place Bet</button>
@@ -161,7 +161,7 @@
       blockExplorerUrls: ['https://testnet.monadscan.com/']
     };
     const CHAIN_ID = 10143;
-    const CONTRACT_ADDRESS = "0xFa569fAe416dbaD7e6D4727e85D3fb828ab0b286";
+    const CONTRACT_ADDRESS = "0x5DC94D32aCcf53B2a235ee7363833a29c7062CfC";
     const CONTRACT_ABI = [
       "function placeBet(uint8[] choices) payable",
       "function getRecentBauCua() view returns (tuple(uint8[3] results, uint256 timestamp)[20])",
